@@ -4,8 +4,8 @@ import numpy as np
 from datetime import datetime
 import ftplib
 import os
-from cfg_docu.init import *
-from cfg_docu.dati import *
+from configurazione.dati import *
+from configurazione.init import *
 
 today=datetime.today().strftime('%y%m%d')
 
