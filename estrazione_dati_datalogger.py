@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 import os
 from matplotlib import pyplot as plt 
+import mysql.connector
+from mysql.connector import errorcode
 
 #VERIFICA DIRECTORIES DISPONIBILI NEL PERCORSO SELEZIONATO
 lista_date = []   
@@ -96,4 +98,15 @@ while indice <= lista_date.index(data_fine):
 df_year.fillna(value=0, inplace=True)
 test_path = "/home/episciotta/Documenti/SVILUPPO/repo_sviluppo_ctz/elab_pv_datalogger/"
 df_year.to_csv(test_path+'riepilogo.csv', index=False)    
-print('Fine Operazioni')       
+   
+while True:
+    ans = input('Esportare i dati verso database mySQL locale? (y/n): ')
+    if ans.lower() == 'y':
+        sql_export_df(df_year, 'fv')
+        break
+    elif ans.lower() == 'n':
+        break
+    else:
+        print('Il carattere inserito è errato')
+
+print('Fine Operazioni')    

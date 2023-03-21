@@ -1,4 +1,6 @@
 #Selezione di una data di INIZIO per l'import dei dati
+from configurazione.dati import *
+
 def seleziona_data_inizio (lista_date):
     while True:
         ans = input("Selezionare una data di inizio per l'import dei dati? (y/n): ")
@@ -86,3 +88,39 @@ def seleziona_data_fine (lista_date):
         else:
             print('Il carattere inserito è errato')
     return (data_fine)
+
+def sql_export_df(df, sql_tabella):
+    try:
+        cnx = mysql.connector.connect(user=user, password=password, host=host, database=database)  
+        print('connesso')
+
+    except mysql.connector.Error as err:
+      if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+        print("Something is wrong with your user name or password")
+      elif err.errno == errorcode.ER_BAD_DB_ERROR:
+        print("Database does not exist")
+      else:
+        print(err) 
+
+    columns = df.columns.tolist()
+    placeholders = '%s'
+    str_nomi = '('+columns[0]+','
+    str_vals = '(%s,'
+    for i in range(1, len(columns)):
+        if i == len(columns)-1:
+            str_nomi = str_nomi +'`'+ columns[i] +'`' +')'
+            str_vals = str_vals + placeholders + ')'
+        else: 
+            str_nomi = str_nomi +'`'+ columns[i] +'`'+', '
+            str_vals = str_vals + placeholders + ', '
+    mysql_str = "INSERT INTO "+ sql_tabella+ " {col_name} VALUES {values}".format(col_name = str_nomi, values = str_vals)
+    cursor = cnx.cursor()
+
+    for i in range (0, df.shape[0]):
+        if i%100==True:
+            print('.')
+        cursor.execute (mysql_str, df.iloc[i].tolist())
+    cnx.commit()
+    cursor.close()
+    cnx.close()
+    return
