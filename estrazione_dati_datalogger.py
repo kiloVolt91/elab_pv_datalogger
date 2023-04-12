@@ -1,3 +1,5 @@
+#SCRIPT DI ESTRAZIONE DEI DATI E CREAZIONE DEL DF DA FILE IMMAGAZZINATI ALL'INTERNO DI CARTELLE LOCALI
+
 #INIZIALIZZAZIONE 
 from configurazione.funzioni_dataframe import *
 from configurazione.dati import *
