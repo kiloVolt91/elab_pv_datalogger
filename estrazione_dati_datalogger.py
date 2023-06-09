@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 import mysql.connector
 from mysql.connector import errorcode
 
-#VERIFICA DIRECTORIES DISPONIBILI NEL PERCORSO SELEZIONATO
+#ESTRAZIONE DEI DATI (DA SCRIPT ESTRAZIONE_DATI)
 lista_date = []   
 os.chdir(origin_path+'/download_ftp')
 for name in os.listdir(os.getcwd()):    
@@ -26,7 +26,7 @@ print('Intervallo temporale dati: ', lista_date[0],' - ', lista_date[len(lista_d
 #INIZIALIZZAZIONE
 df_year=pd.DataFrame()
 data_inizio = seleziona_data_inizio(lista_date)
-data_fine = seleziona_data_fine(lista_date)
+data_fine = seleziona_data_fine(lista_date, data_inizio)
 indice = lista_date.index(data_inizio)
 while indice <= lista_date.index(data_fine):
     data = lista_date[indice]
@@ -43,16 +43,27 @@ while indice <= lista_date.index(data_fine):
     df.drop(df.loc[df['0_Time']=='[Start]'].index, inplace=True)
     df.drop(df.loc[df['0_Time']=='Info'].index, inplace=True)
     df.rename(columns={'Irr':'0_Irr'}, inplace=True) 
-    df.sort_values(by=['Adresse', '0_Time'], inplace=True) 
+    df.sort_values(by=['Adresse', '0_Time'], inplace=True)
+    
+    
+
     for headers in colonne_vuote_string_box:
         df.drop(columns=[headers], inplace=True)
     for old_ind in indirizzi_da_rinominare:
         k = indirizzi_da_rinominare.index(old_ind)
         df['Adresse'].replace({indirizzi_da_rinominare[k]:nuovi_indirizzi[k]}, inplace=True)  
-    nuove_colonne=[0,0,0,0,0,0,0,0,0,0,0,0] 
-    for new_ind in nuovi_indirizzi:  
+    nuove_colonne = [0]*len(headers_da_rinominare)
+    for new_ind in nuovi_indirizzi:
+        lista_colonne =[]
         k = nuovi_indirizzi.index(new_ind)
-        nuove_colonne[k]=[('Adresse'), (new_ind+'_intervallo misura'), (new_ind+'_tres comp'), (new_ind+'_I_AC_av'), (new_ind+'_1'), (new_ind+'_2'), (new_ind+'_3'), (new_ind+'_4'), (new_ind+'_5'), (new_ind+'_6'), (new_ind+'_7'), (new_ind+'_TCARD')] #MODIFICATO 01_07_22 AGGIUNTO _TPAN
+        if len(suffissi_nuove_colonne) != len(headers_da_rinominare):
+            print('Verificare le colonne da rinominare in /configurazione/dati.py') 
+        for suffisso in suffissi_nuove_colonne:
+            if suffissi_nuove_colonne.index(suffisso) == 0:
+                lista_colonne.append(str(suffisso))
+            else:
+                lista_colonne.append(str(new_ind)+str(suffisso))
+        nuove_colonne[k] = lista_colonne
     df.dropna(inplace=True, axis =0)
     stringa_datetime = ' '+data[0:2]+'-'+data[2:4]+'-'+data[4:6]
     df['0_Time'] = df['0_Time'] + stringa_datetime
@@ -63,9 +74,9 @@ while indice <= lista_date.index(data_fine):
 #RE-DISLOCAZIONE DELLE INFORMAZIONI DI STRINGA SU APPOSITE COLONNE
     df_irraggiamento=df.loc[df['Adresse']==nuovi_indirizzi[6],['0_Time', '0_Irr']]
     df_string_box = df_irraggiamento.copy()
-    for i in range(0,len(headers_da_rinominare)):  
-        for k in range(0,len(headers_da_rinominare) ):
-            df_iterativo = (df.loc[df['Adresse']==nuovi_indirizzi[i], [headers_da_rinominare[k]]])
+    for i in range(0,len(nuovi_indirizzi)):  
+        for k in range(0,len(headers_da_rinominare)):
+            df_iterativo = (df.loc[df['Adresse']==nuovi_indirizzi[i], [headers_da_rinominare[k]]]) 
             df_concatena = pd.DataFrame( {nuove_colonne[i][k]:df_iterativo.iloc[0:len(df_iterativo.index),0]})
             df_string_box= pd.concat([df_string_box, df_concatena], axis=1)
     df_string_box.drop(columns=['Adresse', '1.2_7', '2.2_7', '3.2_7', '4.2_7', '5.2_TCARD'], inplace=True)
@@ -92,7 +103,7 @@ while indice <= lista_date.index(data_fine):
 #CREAZIONE DF COMPLESSIVI
     df_day = pd.merge(df_inverter, df_string_box, on = '0_Time') 
     df_year = pd.concat([df_year, df_day])
-    
+
     indice = indice +1
     if indice%10 == True:
         print(indice)
@@ -100,7 +111,7 @@ while indice <= lista_date.index(data_fine):
 df_year.fillna(value=0, inplace=True)
 test_path = "/home/episciotta/Documenti/SVILUPPO/repo_sviluppo_ctz/elab_pv_datalogger/"
 df_year.to_csv(test_path+'riepilogo.csv', index=False)    
-   
+
 while True:
     ans = input('Esportare i dati verso database mySQL locale? (y/n): ')
     if ans.lower() == 'y':

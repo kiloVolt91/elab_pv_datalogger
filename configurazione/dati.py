@@ -9,3 +9,5 @@ headers_da_rinominare = ['Adresse', 's', 'tres comp', 'I_AC_av', 'I_DC0', 'I_DC1
 nuovi_indirizzi = ['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2']
 colonne_vuote_string_box = ['Typ', 'S_VERS', 'Thres_dev', 'Time_dev', 'Str_State', 'Box_State', 'Box_Reg', 'I_DC7', 'T_AMB', 'T_PAN', 'v', 'DIG_INPUT','SPARE2', 'SPARE3', 'SPARE4']
 colonne_vuote_inverter = ['Adresse', 'Typ', 'Inv_size', 'SPARE1', 'SPARE2', 'ALARM1', 'ALARM2', 'ALARM3', 'SPARE3', 'SPARE5', 'Unnamed: 26']
+
+suffissi_nuove_colonne = ['Adresse', '_intervallo misura', '_tres comp','_I_AC_av','_1','_2','_3','_4','_5','_6','_7','_TCARD'] 

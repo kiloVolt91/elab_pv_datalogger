@@ -45,7 +45,7 @@ def seleziona_data_inizio (lista_date):
 
 
 #Selezione di una data di FINE per l'import dei dati
-def seleziona_data_fine (lista_date):
+def seleziona_data_fine (lista_date, data_inizio):
     while True:
         ans = input("Selezionare una data di fine per l'import dei dati? (y/n): ")
         if ans.lower() == 'y':
