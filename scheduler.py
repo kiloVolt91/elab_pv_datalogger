@@ -3,7 +3,6 @@
 from datetime import datetime, date, timedelta
 import time
 import os
-#from configurazione.funzioni_dataframe import *
 import sys
 import pandas as pd
 import numpy as np
@@ -25,7 +24,7 @@ def cron_job():
     for giorno in lista_giorni_mancanti_su_db:
         download_ftp(giorno)
         df_daily = get_data(giorno)
-        df_completo = pd.concat([df_completo, df_daily], axis=1)
+        df_completo = pd.concat([df_completo, df_daily])
     df = select_missing_data_db(df_completo, last_entry)
     print(df)
     

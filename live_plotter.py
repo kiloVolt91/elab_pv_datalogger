@@ -1,3 +1,8 @@
+## INSERIRE CORREZIONE PER PASSAGGIO DA ORA SOLARE AD ORA LEGALE CONSIDERANDO CHE L'ORARIO NEL DB_SENECA È SFASATO DEL VALORE GMT
+## IN ALCUNI GRAFICI L'ENERGIA PRODOTTA È NULLA
+## INSERIRE CONTROLLO PER LA PRESENTAZIONE DI DATI ANOMALI SU GRAFICO
+
+
 from datetime import datetime
 import time
 import sqlalchemy
@@ -11,8 +16,6 @@ import matplotlib
 from matplotlib import gridspec
 matplotlib.use("TkAgg")
 from configurazione.init import *
-
-
 
 
 def get_dataframe_from_database(user, password, host, db, now, fk_id, db_table, db_col, gmt):
@@ -90,12 +93,7 @@ while True:
         #plt.savefig(export_path+'/'+today+'_report.png')
         plt.close()
         today = str(now)[0:11]
-        
-        
-        #fig.clf() #riga commentata per evitare il reset del grafico al cambio di giorno? Verificare
-        #ax1.cla()
-        #ax2.cla()
-        
+
     #INIZIALIZZAZIONE GRAFICO
     x = 0
     y = 0
