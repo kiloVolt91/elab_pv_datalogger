@@ -1,5 +1,7 @@
 .ipynb_checkpoints
 *.ipynb
 *.pyc
-init.py
+init*
 funzioni.py
+*.csv
+*.log
