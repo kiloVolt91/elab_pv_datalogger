@@ -15,11 +15,10 @@ import math
 
 matplotlib.use("TkAgg")
 
-
 def download_df_from_db(url, now):
     today = str(now)[0:11] + '00:00:00'
     connection = sqlalchemy.create_engine(url)
-    query = "SELECT * FROM fv WHERE 0_Time BETWEEN '" +str(today)+ "' AND '"+str(now)+"' ORDER BY 0_Time"
+    query = "SELECT * FROM "+str(db_table_inverter)+" WHERE "+str(db_col_inverter)+" BETWEEN '" +str(today)+ "' AND '"+str(now)+"' ORDER BY "+str(db_col_inverter)
     df_day = pd.read_sql(query, connection)
     return(df_day)
 
@@ -80,7 +79,7 @@ for i in range (0, plot_rows):
         k=k+1
         
 
-url = 'mysql+pymysql://'+user+':'+password+'@'+host+'/'+database
+url = 'mysql+pymysql://'+user_inverter+':'+password_inverter+'@'+host_inverter+'/'+db_inverter
 
 while True:
     now = datetime.now()
