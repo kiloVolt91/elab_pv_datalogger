@@ -1,4 +1,8 @@
-#SCRIPT DI ESTRAZIONE DEI DATI E CREAZIONE DEL DF DA FILE IMMAGAZZINATI ALL'INTERNO DI CARTELLE LOCALI
+# ESTRAZIONE DATI ELETTRICI ED ENERGETICI DAL DATALOGGER GEFRAN RADIUS LOG PRO DISLOCATO PRESSO L'IMPIANTO FOTOVOLTAICO ASI-GPP - exRVR
+# I DATI DA ESTRARRE DEVONO ESSERE PREVENTIVAMENTE SCARICATI ALL'INTERNO DI UN APPOSITO PERCORSO (VEDI FILE DI CONFIGURAZIONE)
+# VI È LA POSSIBILITÀ DI CARICARE I DATI SUL DATABASE PREDISPOSTO
+# VIENE GENERATO UN RIEPILOGO .CSV CONTENENTE IL DATAFRAME SCARICATO 
+
 
 #INIZIALIZZAZIONE 
 
@@ -234,8 +238,7 @@ while indice <= lista_date.index(data_fine):
         print(indice)
 
 df_year.fillna(value=0, inplace=True)
-test_path = "/home/episciotta/Documenti/SVILUPPO/repo_sviluppo_ctz/elab_pv_datalogger/"
-df_year.to_csv(test_path+'riepilogo.csv', index=False)    
+df_year.to_csv(export_path+'riepilogo_'+data_inizio+'_'+data_fine'.csv', index=False)    
 
 while True:
     ans = input('Esportare i dati verso database mySQL locale? (y/n): ')

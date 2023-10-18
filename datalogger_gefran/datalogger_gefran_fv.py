@@ -1,6 +1,9 @@
 ### DATALOGGER INVERTER + STRING_BOX GEFRAN. DOWNLOAD DEI DATI VIA FTP E UPLOAD DEL DATABASE
-from dati import *
-from init import * 
+## SCRIPT PER ESECUZIONE AUTOMATICA IN BACKGROUND TRAMITE CRONTAB
+
+
+from configurazione.dati import *
+from configurazione.init import * 
 from datetime import datetime, date, timedelta
 import time
 import os

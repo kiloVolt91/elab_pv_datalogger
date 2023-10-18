@@ -18,7 +18,7 @@ matplotlib.use("TkAgg")
 def download_df_from_db(url, now):
     today = str(now)[0:11] + '00:00:00'
     connection = sqlalchemy.create_engine(url)
-    query = "SELECT * FROM "+str(db_table_inverter)+" WHERE "+str(db_col_inverter)+" BETWEEN '" +str(today)+ "' AND '"+str(now)+"' ORDER BY "+str(db_col_inverter)
+    query = "SELECT * FROM "+str(db_table_inverter)+" WHERE "+str(db_colonna_temporale_inverter)+" BETWEEN '" +str(today)+ "' AND '"+str(now)+"' ORDER BY "+str(db_colonna_temporale_inverter)
     df_day = pd.read_sql(query, connection)
     return(df_day)
 
@@ -77,7 +77,7 @@ for i in range (0, plot_rows):
     for j in range (0, plot_cols):
         nomi[k] = ax[i,j].text(0, 0, '')
         k=k+1
-        
+
 
 url = 'mysql+pymysql://'+user_inverter+':'+password_inverter+'@'+host_inverter+'/'+db_inverter
 
@@ -115,5 +115,5 @@ while True:
     figure.subplots_adjust(wspace=0.5, hspace=0.2)
     figure.canvas.draw()
     figure.canvas.flush_events()
-    
+
     time.sleep(300)

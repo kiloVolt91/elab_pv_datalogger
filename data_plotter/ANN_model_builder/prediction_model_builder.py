@@ -14,8 +14,7 @@ from matplotlib import gridspec
 from configurazione.init import *
 import os
 import sys
-from sklearn.neural_network import MLPRegressor
-import statistics
+import joblib
 
 
 
@@ -32,7 +31,7 @@ def get_dataframe_from_database(user, password, host, db, now, data_inizio, fk_i
 
 def convert_data_inizio(origin_path):
     lista_date = []   
-    os.chdir(origin_path+'/download_ftp')
+    os.chdir(origin_path)
     for name in os.listdir(os.getcwd()):    
         if (name[0:1]=='2'):
             lista_date.append(name[0:18])       
@@ -45,16 +44,19 @@ def convert_data_inizio(origin_path):
 
 
 ## ESTRAZIONE DATI DAL DB
-data_inizio = convert_data_inizio(origin_path)
+data_inizio = convert_data_inizio(download_data_path)
 t0 = datetime.now()
 print('Orario di inizio estrazione dati: ', t0)
 
-df = get_dataframe_from_database(user, password, host_inverter, db_inverter, t0, data_inizio, 'none', db_table_inverter, db_col_inverter,0)
+df = get_dataframe_from_database(sql_user, sql_password, sql_host, sql_database, t0, data_inizio, 'none', db_table, db_colonna_temporale_inverter,0)
 t1 = datetime.now()
 print('Orario di fine estrazione dati: ', t1)
 print('Durata estrazione dati: ', (t1-t0).total_seconds(), ' secondi')
 
+## CREAZIONE DEL MODELLO DI PREVISIONE
 
+from sklearn.neural_network import MLPRegressor
+import statistics
 
 
 def estrazione_colonne_temp_string(df):
@@ -212,39 +214,13 @@ def random_extract_dataset_for_training_and_testing(df):
 
 now = datetime.now()
 dataset = rimozione_outliers_df(df)
-
-ans = str(input("Normalizzare il dataset? (y/n): ")).lower()
-if (ans != 'y') and (ans != 'n'):
-    sys.exit('Il valore inserito è errato')
-if ans == 'y':
-    print('sì')
-    normalizza_df(dataset)
-else:
-    print('no')
-    
-    # parametri_potenza = normalizza_df(dataset, '0_P_AC')
-    # parametri_irraggiamento = normalizza_df(dataset, '0_Irr')
-    # parametri_temp = normalizza_df(dataset, 'temp_medie')
-
+normalizza_df(dataset) 
 x_training, y_training, x_testing, y_testing = random_extract_dataset_for_training_and_testing(dataset)
-forecasting_model, errore = define_regressor_model(x_training, y_training, x_testing, y_testing, n_iter=400)
+forecasting_model, errore = define_regressor_model(x_training, y_training, x_testing, y_testing, n_iter=4000)
 
-##SEI ARRIVATO QUI. HAI NORMALIZZATO IL DF, DEVI VERIFICARE CHE L'OPZIONE DI NON NORMALIZZAZIONE PERMETTA DI ESTRARRE I DATI NON NORMALIZZATI SENZA ERRORI
-## DEVI CALCOLARE I VALORI FORECAST E CONVERTIRLI
-## CREARE UNA COLONNA DEL DB CON I VALORI PREVISTI E CON L'INDICE DI RENDIMENTO
-## FILTRARE I DATI IN CORRISPONDENZA DEL CONFINE SUPERIORE ED INFERIORE? (MASSIMI ERRORI DI PREVISIONE??)
+##SALVATAGGIO DEL MODELLO PREVISIONALE
+os.chdir (export_path)
+joblib.dump(forecasting_model, "modello_previsionale_fv_asi.pkl") 
+joblib.dump(parametri, "parametri.pkl") 
 
-while True:
-    df = update_dataframe_with_new_values_from_db(user, password, host_inverter, db_inverter, now, 'none', db_table_inverter, db_col_inverter, df)
-    test_irr = df['0_Irr'].tail(1).iloc[0]
-    test_temp = df[colonna_temperature].tail(1).mean().iloc[0]
-    test_power= df['0_P_AC'].tail(1).iloc[0]
-    test = np.array([test_irr, test_temp]).reshape(1,-1)
-    prev= forecasting_model.predict(test)
-
-    PR  = test_power/prev
-    print(PR)
-    break
-    
-    
-## WORK IN PROGRESS - PARTE DI SCRIPT PER EFFETTUARE LE PREVISIONI UTILIZZANDO IL MODELLO REALIZZATO
+##INSERIRE CONTROLLO E VERIFICA

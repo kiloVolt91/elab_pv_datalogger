@@ -10,9 +10,16 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker
 import matplotlib
 from matplotlib import gridspec
-matplotlib.use("TkAgg")
-from init_liveplotter import *
+from configurazione.init import *
+import sys
+import joblib
+from sklearn.neural_network import MLPRegressor
+import statistics
 
+matplotlib.use("TkAgg")
+os.chdir(prevision_model_path)
+modello_previsionale = joblib.load("modello_previsionale_fv_asi.pkl")
+parametri_conversione_modello = joblib.load("parametri.pkl")
 
 #######################################################################################################
 ## DEFINIZIONE DELLE FUNZIONI DI BASE E CREAZIONE DEI PRINCIPALI TOOL UTILIZZATI DALLE MACROFUNZIONI ##
@@ -116,18 +123,20 @@ def esporta_csv(df, nome_file, export_path):
 
 
 def inizializzazione_grafico ():
-    global fig, gs, ax1, ax2, leg
-    global line1,line2,line3, line4, line5, line6, line7
-    global text1, text2, text3, text4, text5, text6, text7, text8, text9, text10, text11, text12
+    global fig, gs, ax0, ax1, ax2, ax3, leg0, leg1, leg3
+    global line1,line2,line3, line4, line5, line6, line7, line8, line9, line10
+    global text1, text2, text3, text4, text5, text6, text7, text8, text9, text10, text11, text12, text13, text14, text15, text16, text17, text18
 
     plt.ion() ## ATTIVAZIONE DELLA MODALITA' "LIVE" 
-    
     # INIZIALIZZAZIONE FIGURA 
     fig = plt.figure(figsize=(25,25))
-    gs = gridspec.GridSpec(2,1, height_ratios=[1, 0.25])
-    ax1 = plt.subplot(gs[0])
-    ax2 = plt.subplot(gs[1])
-    
+    gs = gridspec.GridSpec(3,3, height_ratios=[0.45, 1, 0.25])
+    ax0 = fig.add_subplot(gs[0,:2])
+    ax1 = fig.add_subplot(gs[1, :])
+    ax2 = fig.add_subplot(gs[2, :])
+    ax3=ax0.twinx()
+    ax4 = fig.add_subplot(gs[0, 2])
+
     # INIZIALIZZAZIONE DELLE CURVE
     x = 0
     y = 0
@@ -138,32 +147,59 @@ def inizializzazione_grafico ():
     line5,= ax1.plot(x, y, 'orange', label='Potenza prelevata da rete - Stabilimento') #PRELIEVO DA RETE ENEL - CONTATORE SCAMBIO
     line6,= ax1.plot(x, y, 'yellow', label ='Potenza prelevata da rete - Ausiliari produzione') #PRELIEVO PER CONSUMO AUSILIARI 
     line7,= ax1.plot(x, y, 'red', label = 'Perdite ausiliari produzione') #PERDITE TRASFORMATORE+AUX
+    line8,= ax0.plot(x, y, 'green', label = 'Potenza Attiva Reale') #POTENZA ELETTRICA PRODOTTA DALL'IMPIANTO
+    line9,= ax0.plot(x, y, 'red', label = 'Potenza Attiva Stimata') #P0TENZA ELETTRICA PREVISTA DAL MODELLO ANN
+    line10, = ax3.plot(x, y, 'purple', label = 'Indice Prestazionale') #PRESTAZIONI IMPIANTISTICHE IN RELAZIONE AI DATI STORICI DEL MODELLO ANN IMPLEMENTATO
     
     # INIZIALIZZAZIONE ASSI E LEGENDA
+    ax0.yaxis.set_major_locator(ticker.LinearLocator(10))
+    leg0 = ax0.legend(loc='center left')
+    # ax3.grid()
+    ax0.set_xlabel("Orario di Acquisizione [HH:MM]")
+    ax0.set_ylabel("Potenza elettrica [kW]")
+    ax0.set_ylim(0,260)
+    ax0.grid()
+    
     ax1.yaxis.set_major_locator(ticker.LinearLocator(10))
-    leg = ax1.legend();
+    leg1 = ax1.legend();
     ax1.grid()
     ax1.set_xlabel("Orario di Acquisizione [HH:MM]")
     ax1.set_ylabel("Potenza elettrica [kW]")
-    ax1.set_ylim(0,300)
+    ax1.set_ylim(0,260)
+    
     ax2.axis([0, 72.5, 0, 20])
     ax2.set_xticks([])
     ax2.set_yticks([])
+    
+    leg3 = ax3.legend(loc='upper left')
+    ax3.set_ylim(0,1.1 )
+    ax3.set_ylabel("Indice Prestazionale")
+    
+    ax4.xaxis.set_major_locator(ticker.NullLocator())
+    ax4.yaxis.set_major_locator(ticker.NullLocator())
+    
     fig.suptitle("Giorno: "+str(now)[0:11], fontsize=16)
     
     #INIZIALIZZAZIONE TESTI
-    text1=ax2.text(1.5,9.5, 'Energia Lorda Prodotta: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'b', 'alpha': 0.5, 'pad': 10})
-    text2=ax2.text(1.5,2.5, 'Energia Netta Prodotta: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'c', 'alpha': 0.5, 'pad': 10})
-    text3=ax2.text(19.5,9.5, 'Energia Immessa in Rete: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'purple', 'alpha': 0.5, 'pad': 10})
-    text4=ax2.text(19.5,2.5, 'Energia Autoconsumata: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'g', 'alpha': 0.5, 'pad': 10})
-    text5=ax2.text(37.5,9.5, 'Energia Prelevata da Rete: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'orange', 'alpha': 0.5, 'pad': 10})
-    text6=ax2.text(37.5,2.5, 'Energia Prelevata Aux: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'yellow', 'alpha': 0.5, 'pad': 10})
-    text7=ax2.text(55.5,9.5, 'Perdite AC Impianto FV: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'red', 'alpha': 0.5, 'pad': 10})
-    text8=ax2.text(55.5,2.5, 'Picco di Potenza: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'magenta', 'alpha': 0.5, 'pad': 10})
-    text9=ax2.text(1.5,16.5, 'Introito Incentivo: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'silver', 'alpha': 0.5, 'pad': 10})
-    text10=ax2.text(19.5,16.5, 'Introito Vendita Energia: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'silver', 'alpha': 0.5, 'pad': 10})
-    text11=ax2.text(37.5,16.5, 'Spesa Acquisto Energia: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'silver', 'alpha': 0.5, 'pad': 10})
-    text12=ax2.text(55.5,16.5, 'Risparmio Autoconsumo: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'silver', 'alpha': 0.5, 'pad': 10})
+    text1=ax2.text(1.5,9.5, 'Energia Lorda Prodotta: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'b', 'alpha': 0.5, 'pad': 6})
+    text2=ax2.text(1.5,2.5, 'Energia Netta Prodotta: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'c', 'alpha': 0.5, 'pad': 6})
+    text3=ax2.text(19.5,9.5, 'Energia Immessa in Rete: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'purple', 'alpha': 0.5, 'pad': 6})
+    text4=ax2.text(19.5,2.5, 'Energia Autoconsumata: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'g', 'alpha': 0.5, 'pad': 6})
+    text5=ax2.text(37.5,9.5, 'Energia Prelevata da Rete: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'orange', 'alpha': 0.5, 'pad': 6})
+    text6=ax2.text(37.5,2.5, 'Energia Prelevata Aux: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'yellow', 'alpha': 0.5, 'pad': 6})
+    text7=ax2.text(55.5,9.5, 'Perdite AC Impianto FV: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'red', 'alpha': 0.5, 'pad': 6})
+    text8=ax2.text(55.5,2.5, 'Picco di Potenza: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'magenta', 'alpha': 0.5, 'pad': 6})
+    text9=ax2.text(1.5,16.5, 'Introito Incentivo: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'silver', 'alpha': 0.5, 'pad': 6})
+    text10=ax2.text(19.5,16.5, 'Introito Vendita Energia: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'silver', 'alpha': 0.5, 'pad': 6})
+    text11=ax2.text(37.5,16.5, 'Spesa Acquisto Energia: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'silver', 'alpha': 0.5, 'pad': 6})
+    text12=ax2.text(55.5,16.5, 'Risparmio Autoconsumo: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'silver', 'alpha': 0.5, 'pad': 6})
+    
+    text13=ax4.text(0.1,0.1, 'Potenza Attiva Misurata: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'lightgreen', 'alpha': 0.5, 'pad': 4.2})
+    text14=ax4.text(0.1,0.25, 'Potenza Attiva Stimata: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'orangered', 'alpha': 0.5, 'pad': 4.2})
+    text15=ax4.text(0.1,0.4, 'Irraggiamento: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'gold', 'alpha': 0.5, 'pad': 4.2})
+    text16=ax4.text(0.1,0.55, 'Temperatura Media Pannello: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'lightskyblue', 'alpha': 0.5, 'pad': 4.2})
+    text17=ax4.text(0.1,0.7, 'Indice di Prestazione: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'purple', 'alpha': 0.5, 'pad': 4.2})
+    text18=ax4.text(0.1,0.85, 'Ora misure [HH:MM]: '+str(0)+ ' %', style='italic', size='medium', weight='bold', bbox={'facecolor': 'silver', 'alpha': 0.5, 'pad': 4.2})
     return 
 
 def calcolo_contatori_energetici_ed_economicici():
@@ -194,14 +230,17 @@ def calcolo_contatori_energetici_ed_economicici():
     df_debug = pd.DataFrame() ## INIZIALIZZAZIONE DATAFRAME DI DEBUGGING - POSSIBILE COMMENTARE LA SEZIONE
 
     ##ESTRAPOLAZIONE DEI PREZZI ORARI
-    for ora in range (1, ora_corrente):  ## sommare all'ora corrente +1 o +2? verificare conseguenze   
+    for ora in range (1, ora_corrente+1):  ## sommare all'ora corrente +1 o +2? verificare conseguenze   
         mercato_vendita = 'SICI'
         pun = 'PUN'
         prezzo_vendita_energia = ((df_day_gme.loc[df_day_gme['Ora'] == ora, [mercato_vendita]]).iloc[0])[0]/1000
         prezzo_acquisto_energia = ((df_day_gme.loc[df_day_gme['Ora'] == ora, [pun]]).iloc[0])[0]/1000
         
         ## CONVERSIONE DELL'ORA "GME" IN UN VALORE TIMESTAMP UTILIZZABILE PER I CONFRONTI CON I DATI PRESENTI SUI DATAFRAMES 
-        selezione_ora = today_gme +' '+  str(ora-1).zfill(2) +':00'
+        if str(ora-1+2).zfill(2) == '24':
+            selezione_ora == today_gme +' '+'23:59'
+        else:
+            selezione_ora = today_gme +' '+  str(ora-1+2).zfill(2) +':00' ##N.B. +2 VALORE GMT LOCALE
         orario_di_comparazione = datetime.strptime(selezione_ora, '%Y%m%d %H:%M')
         orario_attuale_msecs = datetime.timestamp(orario_di_comparazione)*1000
         
@@ -248,7 +287,8 @@ def calcolo_contatori_energetici_ed_economicici():
         ## ALTRI CONTATORI
         energia_contatore_produzione_prelievo_aux = get_daily_energy_value_from_df(df_day_seneca_prel_aux, now, 'converted_value', 1)
         energia_prodotta_inverter = get_daily_energy_value_from_df(df_day_inverter, now, '0_E_AC', 1)
-        energia_perduta = energia_prodotta_inverter - energia_contatore_produzione 
+        energia_perduta = energia_prodotta_inverter - energia_contatore_produzione
+        
             
     # DATAFRAME DI DEBUGGING
         df_recap = pd.DataFrame ({
@@ -264,6 +304,7 @@ def calcolo_contatori_energetici_ed_economicici():
     return 
 
 def aggiornamento_grafici():
+    global label_asse_x, xticks
     #AGGIORNAMENTO DELLE CURVE
     line1.set_xdata(x_inv)
     line1.set_ydata(y_inv)
@@ -279,7 +320,48 @@ def aggiornamento_grafici():
     line6.set_ydata(y_prel_aux_sen)
     line7.set_xdata(x_perdite)
     line7.set_ydata(y_perdite)
+    line8.set_ydata(prev_data)
+    line8.set_xdata(x_inv)
+    line9.set_xdata(x_inv)
+    line9.set_ydata(y_inv)
+    line10.set_ydata(performance_index)
+    line10.set_xdata(x_inv)
     
+    #AGGIORNAMENTO DEI LABELS E DEGLI ASSI
+    label_asse_x=[]
+    # xticks_space = round(len(x_prod_sen)/59+1)
+    xticks_space = round((len(x_prod_sen)/20)+1)
+    xticks_index = list(range(0, len(x_prod_sen), xticks_space))
+    xticks = []
+    for i in range(0, len(xticks_index)):
+        time_msec = x_prod_sen[xticks_index[i]]
+        xticks.append(time_msec)
+        time_datetime = datetime.fromtimestamp(time_msec/1000.0)
+        label_asse_x.append(str(time_datetime.hour).zfill(2)+':'+str(time_datetime.minute).zfill(2))   
+        
+    ax1.set_xticks(xticks, labels = label_asse_x) # set new tick positions
+    ax1.tick_params(axis='x', rotation=0, labelsize='xx-small') # set tick rotation
+    ax1.set_xlim(xticks[0], xticks[-1])
+    ax1.autoscale_view(True,True,True)
+    
+    ax2.autoscale_view(True,True,True)
+    
+    label_asse_x0=[]
+    xticks_space = round((len(x_prod_sen)/59)+1)
+    xticks_index = list(range(0, len(x_inv), xticks_space))
+    xticks = []
+    for i in range(0, len(xticks_index)):
+        time_msec = x_inv[xticks_index[i]]
+        xticks.append(time_msec)
+        time_datetime = datetime.fromtimestamp(time_msec/1000.0)
+        label_asse_x0.append(str(time_datetime.hour).zfill(2)+':'+str(time_datetime.minute).zfill(2))
+    ax0.set_xticks(xticks, labels = label_asse_x0) # set new tick positions
+    ax0.tick_params(axis='x', rotation=0, labelsize='xx-small') # set tick rotation
+    ax0.set_xlim(xticks[0], xticks[-1])
+    ax0.autoscale_view(True,True,True)
+    
+    ax3.autoscale_view(True,True,True)
+
     ## AGGIORNAMENTO DEI TESTI
     text1.set_text('Energia Lorda Prodotta: '+str("{:.2f}".format(energia_prodotta_inverter)+ ' kWh'))
     text2.set_text('Energia Netta Prodotta: '+str("{:.2f}".format(energia_contatore_produzione)+ ' kWh'))
@@ -293,31 +375,23 @@ def aggiornamento_grafici():
     text10.set_text('Introito Vendita Energia: '+str("{:.2f}".format(introito_vendita)+ ' €'))
     text11.set_text('Spesa Acquisto Energia: '+str("{:.2f}".format(spesa_acquisto_energia)+ ' €'))
     text12.set_text('Risparmio Autoconsumo: '+str("{:.2f}".format(risparmio_mancato_acquisto_energia)+ ' €'))
-
-    #AGGIORNAMENTO DEI LABELS E DEGLI ASSI
-    label_asse_x=[]
-    xticks_space = round(len(x_prod_sen)/59+1)
-    xticks_index = list(range(0, len(x_prod_sen), xticks_space))
-    xticks = []
-    for i in range(0, len(xticks_index)):
-        time_msec = x_prod_sen[xticks_index[i]]
-        xticks.append(time_msec)
-        time_datetime = datetime.fromtimestamp(time_msec/1000.0)
-        label_asse_x.append(str(time_datetime.hour).zfill(2)+':'+str(time_datetime.minute).zfill(2))
-    ax1.set_xticks(xticks, labels = label_asse_x) # set new tick positions
-    ax1.tick_params(axis='x', rotation=90) # set tick rotation
-    ax1.set_xlim(xticks[0], xticks[-1])
-    ax1.autoscale_view(True,True,True)
-    ax2.autoscale_view(True,True,True)
+    text13.set_text('Potenza Attiva Misurata: '+str("{:.2f}".format(y_inv[-1])+ ' kW'))
+    text14.set_text('Potenza Attiva Stimata: '+str("{:.2f}".format(prev_data[-1].tolist()[0])+ ' kW'))
+    text15.set_text('Irraggiamento: '+str("{:.2f}".format(irr_list[-1])+ ' W/mq'))
+    text16.set_text('Temperatura Media Pannello: '+str("{:.2f}".format(temp_list[-1])+ ' °C'))
+    text17.set_text('Indice di Prestazione: '+str("{:.2f}".format(performance_index[-1].tolist()[0])))
+    text18.set_text('Ora misure [HH:MM]: '+str("{}".format(label_asse_x[-1])))
     
     ## AGGIORNAMENTO DELLA FIGURA "LIVE"
     fig.canvas.draw()
     fig.canvas.flush_events()
+    
+    
     return
 
 def estrapolazione_vettori_coordinate_cartesiane():
-    global x_prod_sen, y_prod_sen, x_imm_sen, y_imm_sen, x_prel_sen, y_prel_sen, x_prel_aux_sen, y_prel_aux_sen, y_perdite, x_perdite, y_inv, x_inv, autoconsumo
-
+    global x_prod_sen, y_prod_sen, x_imm_sen, y_imm_sen, x_prel_sen, y_prel_sen, x_prel_aux_sen, y_prel_aux_sen, y_perdite, x_perdite, y_inv, x_inv, autoconsumo, prev_data, performance_index
+    global irr_list, temp_list
     ## VETTORE X-Y INVERTER - PRODUZIONE LORDA DI ENERGIA ELETTRICA OGNI 5 MINUTI
     len_x_inv = df_day_inverter.shape[0]
     y_inv = df_day_inverter['0_P_AC'].tolist()
@@ -341,7 +415,29 @@ def estrapolazione_vettori_coordinate_cartesiane():
     perdite_aux = []
     for i in range (0, len(x)):
         autoconsumo.append( y_prod_sen[i] - y_imm_sen[i])
+        
+    ##DATI PREVISIONALI MODELLO ANN
+    colonna_temperature, colonna_stringhe = estrazione_colonne_temp_string(df_day_inverter)
+    irr_list = df_day_inverter['0_Irr'].tolist() 
+    temp_list = df_day_inverter[colonna_temperature].mean(axis=1).tolist() 
+    
+    prev_data=[]  
+    performance_index = []
+    for i in range (0, len(y_inv)):
+        irr_val_norm = normalizza_valore(irr_list[i], parametri_conversione_modello['0_Irr'])
+        temp_val_norm = normalizza_valore(temp_list[i], parametri_conversione_modello['avarage_temps'])
+        
+        data_pack = np.array([irr_val_norm, temp_val_norm]).reshape(1,-1)
+        prevision_norm = modello_previsionale.predict(data_pack)
+        prevision_denorm = denormalizzazione_valore(prevision_norm, parametri_conversione_modello['0_P_AC'])
+        prev_data.append(prevision_denorm)
+        if prevision_denorm >10:
+            performance_index.append(y_inv[i]/prevision_denorm)
+        else:
+            performance_index.append(-0.01)
 
+    
+    
     ## CURVA DELLE PERDITE DEGLI AUSILIARI DELL'IMPIANTO FV (TRASFORMATORE ISOLAMENTO, CLIMATIZZAZIONE, SERVIZI ANCILLARI)
     x1 = len(x_inv) 
     x2 = len(x_prod_sen)
@@ -372,7 +468,7 @@ def esportazione_csv_riepilogo():
 def aggiornamento_datarames():
     global df_day_inverter, df_day_seneca_prod, df_day_seneca_prel_aux, df_day_seneca_imm, df_day_seneca_prel
 
-    df_day_inverter = update_dataframe_with_new_values_from_db(user_inverter, password_inverter, host_inverter, db_inverter, now, 'none', db_table_inverter, db_col_inverter, df_day_inverter)
+    df_day_inverter = update_dataframe_with_new_values_from_db(user_inverter, password_inverter, host_inverter, db_inverter, now, 'none', db_table_inverter, db_colonna_temporale_inverter, df_day_inverter)
     last_entry_time = df_day_inverter['0_Time'].tail(1).iloc[-1]
     df_day_seneca_prod = update_dataframe_with_new_values_from_db(user, password, host_seneca, db_seneca, last_entry_time, 24, db_table_seneca, db_col_seneca, df_day_seneca_prod)
     df_day_seneca_prel_aux = update_dataframe_with_new_values_from_db(user, password, host_seneca, db_seneca, last_entry_time, 23, db_table_seneca, db_col_seneca, df_day_seneca_prel_aux)
@@ -383,13 +479,13 @@ def aggiornamento_datarames():
 def estrazione_dei_dataframes_dal_database():
     global df_day_inverter, df_day_seneca_prod, df_day_seneca_prel_aux, df_day_seneca_imm, df_day_seneca_prel, df_day_gme, now
     
-    df_day_inverter = get_dataframe_from_database(user_inverter, password_inverter, host_inverter, db_inverter, now, 'none', db_table_inverter, db_col_inverter,0)
+    df_day_inverter = get_dataframe_from_database(user_inverter, password_inverter, host_inverter, db_inverter, now, 'none', db_table_inverter, db_colonna_temporale_inverter,0)
     
     ## DURANTE LA NOTTE L'INVERTER ENTRA IN STANDBY E NON SI HANNO DATI DA RAPPRESENTARE
     while df_day_inverter.empty==True:
         time.sleep(300) 
         now = datetime.now()
-        df_day_inverter = get_dataframe_from_database(user_inverter, password_inverter, host_inverter, db_inverter, now, 'none', db_table_inverter, db_col_inverter,0)   
+        df_day_inverter = get_dataframe_from_database(user_inverter, password_inverter, host_inverter, db_inverter, now, 'none', db_table_inverter, db_colonna_temporale_inverter,0)   
         print('dataframe vuoto', now)
         
     last_entry_time = df_day_inverter['0_Time'].tail(1).iloc[-1]
@@ -400,29 +496,60 @@ def estrazione_dei_dataframes_dal_database():
     df_day_gme = get_gme_dataframe_from_database(user_inverter, password_inverter, host_inverter, db_gme, db_table_gme, db_colonna_giorno_gme)
     return
 
+def estrazione_colonne_temp_string(df):
+    temperature = []
+    stringhe = []
+    colonne = df.columns.tolist()    
+    for colonna in colonne:
+        if colonna[4::] == 'TCARD':
+            temperature.append(colonna)
+        if colonna[4:5].isnumeric():
+            stringhe.append(colonna)
+    return(temperature, stringhe)
+
+def normalizza_valore(valore, parametro):
+    valore_norm = ((valore - parametro[1])/(parametro[0]-parametro[1]))
+    return (valore_norm)
+
+def denormalizzazione_valore(valore, parametro):
+    valore_denorm = (valore*(parametro[0]-parametro[1])+parametro[1])
+    return(valore_denorm)
 
 #########################################
 ## PROGRAMMA DI LIVE PLOTTING DEI DATI ##
 #########################################
+def live_plotter():
+    global now
+    now = datetime.now()
+    today = str(now)[0:11]
+    
+    while True:
+        if today[0:11] != str(now)[0:11]: 
+            plt.close()
+            today = str(now)[0:11]
+        inizializzazione_grafico ()
+        estrazione_dei_dataframes_dal_database()
+
+        while today[0:11] == str(now)[0:11]:  
+            now = datetime.now()
+            print('Nuovo inserimento dati, ora: ', str(now.hour).zfill(2)+':'+str(now.minute).zfill(2))
+
+            aggiornamento_datarames()
+            esportazione_csv_riepilogo()   
+            estrapolazione_vettori_coordinate_cartesiane()
+            calcolo_contatori_energetici_ed_economicici()
+            aggiornamento_grafici()
+            fig.savefig(export_path+'/'+today+'_report.png')
+            time.sleep(300)
+    return
 
 
-now = datetime.now()
-today = str(now)[0:11]
 while True:
-    if today[0:11] != str(now)[0:11]: 
-        plt.close()
-        today = str(now)[0:11]
-    inizializzazione_grafico ()
-    estrazione_dei_dataframes_dal_database()
-
-    while today[0:11] == str(now)[0:11]:  
-        now = datetime.now()
-        print('Nuovo inserimento dati, ora: ', str(now.hour).zfill(2)+':'+str(now.minute).zfill(2))
-        
-        aggiornamento_datarames()
-        esportazione_csv_riepilogo()   
-        estrapolazione_vettori_coordinate_cartesiane()
-        calcolo_contatori_energetici_ed_economicici()
-        aggiornamento_grafici()
-        fig.savefig(export_path+'/'+today+'_report.png')
-        time.sleep(300)
+    try:
+        live_plotter()
+    except Exception as error:
+        print(datetime.now())
+        print('Errore :'+ str(error))
+        sys.exit()
+        os.execl('python', 'live_plotter.py') 
+    break
