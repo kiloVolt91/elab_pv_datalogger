@@ -23,7 +23,7 @@ def download_df_from_db(url, now):
     return(df_day)
 
 def update_valori_grafico(df_day, now):
-    print('Nuovo inserimento dati, ora: ', str(now.hour).zfill(2)+':'+str(now.minute).zfill(2))
+    print('SB liveplot - Nuovo inserimento dati, ora: ', str(now.hour).zfill(2)+':'+str(now.minute).zfill(2))
     update_potenza = df_day['0_P_AC'].tolist()
     update_data = df_day['0_Time'].tolist()
     update_irraggiamento = df_day['0_Irr'].tolist()

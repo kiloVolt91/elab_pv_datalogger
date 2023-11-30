@@ -42,7 +42,12 @@ def get_dataframe_from_database(user, password, host, db, now, fk_id, db_table, 
     else:
         sec_query='' 
     query = "SELECT * FROM "+str(db_table)+" WHERE "+str(db_col)+" BETWEEN '" +str(today)+ "' AND '"+str(now)+"'"+sec_query
-    df = pd.read_sql(query, connection)
+    
+    df = pd.DataFrame()   
+    try:
+        df = pd.read_sql(query, connection)
+    except Exception as error:
+        print(error)
     return(df)
 
 def update_dataframe_with_new_values_from_db(user, password, host, db, now, fk_id, db_table, db_col, df):
@@ -56,7 +61,11 @@ def update_dataframe_with_new_values_from_db(user, password, host, db, now, fk_i
         sec_query='' 
     query = "SELECT * FROM "+db_table+" WHERE "+db_col+" > '" +str(last_entry.iloc[0])+"'"+sec_query
     
-    update_df = pd.read_sql(query, connection)
+    update_df = pd.DataFrame()
+    try:
+        update_df = pd.read_sql(query, connection)
+    except Exception as error:
+        print(error)
     new_df = pd.concat([df, update_df])
     return(new_df)
     
@@ -277,25 +286,26 @@ def calcolo_contatori_energetici_ed_economicici():
         spesa_acquisto_energia = acquisto_energia[0] 
         energia_prelevata_contatore_scambio=energia_prelevata[0]
         
-        ## CONTATORE DELL'ENERGIA ELETTRICA PRODOTTA
-        delta_energia_prodotta = energia_oraria_prodotta['converted_value'].tail(1).tolist()[0]-energia_oraria_prodotta['converted_value'].head(1).tolist()[0]
-        energia_prodotta[0] = energia_prodotta[0]+delta_energia_prodotta
-        introito_incentivo = energia_prodotta[0]*valore_incentivo
-        energia_contatore_produzione = energia_prodotta[0]
+        ## CONTATORE DELL'ENERGIA ELETTRICA PRODOTTA -- modificato 28/11
+        if energia_oraria_prodotta['converted_value'].tolist():
+            delta_energia_prodotta = energia_oraria_prodotta['converted_value'].tail(1).tolist()[0]-energia_oraria_prodotta['converted_value'].head(1).tolist()[0]
+            energia_prodotta[0] = energia_prodotta[0]+delta_energia_prodotta
+            introito_incentivo = energia_prodotta[0]*valore_incentivo
+            energia_contatore_produzione = energia_prodotta[0]
         
         ## CONTATORE DELL'ENERGIA ELETTRICA AUTOCONSUMATA
-        delta_energia_autoconsumata = delta_energia_prodotta - delta_energia_immessa
-        energia_autoconsumata[0] = energia_autoconsumata[0]+delta_energia_autoconsumata
-        energia_autoconsumata_stabilimento = energia_autoconsumata[0]
+            delta_energia_autoconsumata = delta_energia_prodotta - delta_energia_immessa
+            energia_autoconsumata[0] = energia_autoconsumata[0]+delta_energia_autoconsumata
+            energia_autoconsumata_stabilimento = energia_autoconsumata[0]
         
         ## CONTATORE DELLA CONVENIENZA "TEORICA" DELL'AUTOCONSUMO - AL NETTO DEGLI ONERI DI SISTEMA E PERDITE DI RETE
-        risparmio_energetico[0] = risparmio_energetico[0]+delta_energia_autoconsumata*prezzo_acquisto_energia-delta_energia_autoconsumata*prezzo_vendita_energia
-        risparmio_mancato_acquisto_energia = risparmio_energetico[0]
-        
-        ## ALTRI CONTATORI
-        energia_contatore_produzione_prelievo_aux = get_daily_energy_value_from_df(df_day_seneca_prel_aux, now, 'converted_value', 1)
-        energia_prodotta_inverter = get_daily_energy_value_from_df(df_day_inverter, now, '0_E_AC', 1)
-        energia_perduta = energia_prodotta_inverter - energia_contatore_produzione
+            risparmio_energetico[0] = risparmio_energetico[0]+delta_energia_autoconsumata*prezzo_acquisto_energia-delta_energia_autoconsumata*prezzo_vendita_energia
+            risparmio_mancato_acquisto_energia = risparmio_energetico[0]
+
+            ## ALTRI CONTATORI
+            energia_contatore_produzione_prelievo_aux = get_daily_energy_value_from_df(df_day_seneca_prel_aux, now, 'converted_value', 1)
+            energia_prodotta_inverter = get_daily_energy_value_from_df(df_day_inverter, now, '0_E_AC', 1)
+            energia_perduta = energia_prodotta_inverter - energia_contatore_produzione
             
     # DATAFRAME DI DEBUGGING - COMMENTARE 
         df_recap = pd.DataFrame ({
@@ -347,7 +357,7 @@ def aggiornamento_grafici():
     ax1.set_xticks(tick_pos, labels = label_asse_x) 
     ax1.tick_params(axis='x', rotation=90, labelsize='xx-small')
     ax1.set_xlim(tick_pos[0], tick_pos[-1])
-    ax1.set_ylim(0,max(y_inv)+10)
+    ax1.set_ylim(0,max([max(y_inv),max(y_prod_sen)])+10)
     ax1.autoscale_view(True,True,True)
     ax2.autoscale_view(True,True,True)
     
@@ -481,7 +491,7 @@ def aggiornamento_datarames():
 def estrazione_dei_dataframes_dal_database():
     global df_day_inverter, df_day_seneca_prod, df_day_seneca_prel_aux, df_day_seneca_imm, df_day_seneca_prel, df_day_gme, now
     
-    df_day_inverter = get_dataframe_from_database(user_inverter, password_inverter, host_inverter, db_inverter, now, 'none', db_table_inverter, db_colonna_temporale_inverter,0)
+    df_day_inverter = get_dataframe_from_database(user_inverter, password_inverter, host_inverter, db_inverter, now, 'none', db_table_inverter, db_colonna_temporale_inverter,gmt = 0)
     
     ## DURANTE LA NOTTE L'INVERTER ENTRA IN STANDBY E NON SI HANNO DATI DA RAPPRESENTARE
     while df_day_inverter.empty==True:
@@ -491,6 +501,7 @@ def estrazione_dei_dataframes_dal_database():
         print('dataframe vuoto', now)
         
     last_entry_time = df_day_inverter['0_Time'].tail(1).iloc[-1]
+    gmt = 1 ## ORA LEGALE: GMT +2, ORA SOLARE GMT +1
     df_day_seneca_prod = get_dataframe_from_database(user, password, host_seneca, db_seneca, last_entry_time, 24, db_table_seneca, db_col_seneca,2)
     df_day_seneca_prel_aux = get_dataframe_from_database(user, password, host_seneca, db_seneca, last_entry_time, 23, db_table_seneca, db_col_seneca,2)
     df_day_seneca_imm = get_dataframe_from_database(user, password, host_seneca, db_seneca, last_entry_time, 11, db_table_seneca, db_col_seneca,2)
