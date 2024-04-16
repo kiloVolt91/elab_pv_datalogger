@@ -58,7 +58,7 @@ def ftp_connection(host, port, user, password):
             ftpc_cnx = ftplib.FTP()
             ftpc_cnx.connect(host, port)
             ftpc_cnx.login(user, password)
-            ftpc.set_pasv(False) # Utilizza la modalità ATTIVA
+            ftpc_cnx.set_pasv(False) # Utilizza la modalità ATTIVA
     except Exception as err:
             print(str(err))
     return
@@ -169,7 +169,10 @@ def download_ftp(giorno):
     files = [(file_originale_inverter, file_scaricato_inverter), (file_originale_stringhe, file_scaricato_stringhe)]
     for file in files:
         with open(file[1], "wb") as f:
-            ftpc_cnx.retrbinary("RETR " + file[0], f.write)                    
+            try:
+                ftpc_cnx.retrbinary("RETR " + file[0], f.write)                    
+            except:
+                print('file non trovato')
     ftpc_cnx.cwd(ftp_path)
     os.chdir(download_data_path)
     ftpc_cnx.quit()

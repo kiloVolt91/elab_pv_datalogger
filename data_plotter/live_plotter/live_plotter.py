@@ -273,18 +273,20 @@ def calcolo_contatori_energetici_ed_economicici():
         orario_precedente = orario_attuale_msecs
         
         ## CONTATORE DELL'ENERGIA ELETTRICA IMMESSA IN RETE E DELLA RELATIVA VENDITA AL PREZZO ZONALE
-        delta_energia_immessa = energia_oraria_immessa['value'].tail(1).tolist()[0]-energia_oraria_immessa['value'].head(1).tolist()[0]
-        energia_immessa[0] = energia_immessa[0]+delta_energia_immessa
-        vendita_energia[0] = vendita_energia[0]+delta_energia_immessa*prezzo_vendita_energia 
-        introito_vendita = vendita_energia[0]
-        energia_immessa_contatore_scambio=energia_immessa[0]
+        if energia_oraria_immessa['value'].tolist():
+            delta_energia_immessa = energia_oraria_immessa['value'].tail(1).tolist()[0]-energia_oraria_immessa['value'].head(1).tolist()[0]
+            energia_immessa[0] = energia_immessa[0]+delta_energia_immessa
+            vendita_energia[0] = vendita_energia[0]+delta_energia_immessa*prezzo_vendita_energia 
+            introito_vendita = vendita_energia[0]
+            energia_immessa_contatore_scambio=energia_immessa[0]
 
         ## CONTATORE DELL'ENERGIA ELETTRICA PRELEVATA DA RETE E DEL RELATIVO ACQUISTO AL PREZZO UNICO NAZIONALE
-        delta_energia_prelevata = energia_oraria_prelevata['value'].tail(1).tolist()[0]-energia_oraria_prelevata['value'].head(1).tolist()[0]
-        energia_prelevata[0] = energia_prelevata[0]+delta_energia_prelevata
-        acquisto_energia[0] = acquisto_energia[0]+delta_energia_prelevata*prezzo_acquisto_energia
-        spesa_acquisto_energia = acquisto_energia[0] 
-        energia_prelevata_contatore_scambio=energia_prelevata[0]
+        if energia_oraria_prelevata['value'].tolist():
+            delta_energia_prelevata = energia_oraria_prelevata['value'].tail(1).tolist()[0]-energia_oraria_prelevata['value'].head(1).tolist()[0]
+            energia_prelevata[0] = energia_prelevata[0]+delta_energia_prelevata
+            acquisto_energia[0] = acquisto_energia[0]+delta_energia_prelevata*prezzo_acquisto_energia
+            spesa_acquisto_energia = acquisto_energia[0] 
+            energia_prelevata_contatore_scambio=energia_prelevata[0]
         
         ## CONTATORE DELL'ENERGIA ELETTRICA PRODOTTA -- modificato 28/11
         if energia_oraria_prodotta['converted_value'].tolist():
@@ -294,6 +296,7 @@ def calcolo_contatori_energetici_ed_economicici():
             energia_contatore_produzione = energia_prodotta[0]
         
         ## CONTATORE DELL'ENERGIA ELETTRICA AUTOCONSUMATA
+        try:
             delta_energia_autoconsumata = delta_energia_prodotta - delta_energia_immessa
             energia_autoconsumata[0] = energia_autoconsumata[0]+delta_energia_autoconsumata
             energia_autoconsumata_stabilimento = energia_autoconsumata[0]
@@ -306,6 +309,8 @@ def calcolo_contatori_energetici_ed_economicici():
             energia_contatore_produzione_prelievo_aux = get_daily_energy_value_from_df(df_day_seneca_prel_aux, now, 'converted_value', 1)
             energia_prodotta_inverter = get_daily_energy_value_from_df(df_day_inverter, now, '0_E_AC', 1)
             energia_perduta = energia_prodotta_inverter - energia_contatore_produzione
+        except err as Error:
+            print(err)
             
     # DATAFRAME DI DEBUGGING - COMMENTARE 
         df_recap = pd.DataFrame ({
@@ -545,6 +550,4 @@ while True:
     except Exception as error:
         print(datetime.now())
         print('Errore :'+ str(error))
-        #sys.exit()
-        os.execl('python', 'live_plotter.py') 
-    break
+    
