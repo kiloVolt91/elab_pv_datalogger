@@ -1,9 +1,9 @@
 .ipynb_checkpoints
 *.ipynb
 *.pyc
-init*
 funzioni.py
 *.csv
+configurazione.ini
 *.log
 *wip
 data_plotter/ANN_model_builder/modello_previsionale_fv_asi.pkl

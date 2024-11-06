@@ -1,258 +1,225 @@
-### DATALOGGER INVERTER + STRING_BOX GEFRAN. DOWNLOAD DEI DATI VIA FTP E UPLOAD DEL DATABASE
-## SCRIPT PER ESECUZIONE AUTOMATICA IN BACKGROUND TRAMITE CRONTAB
-
-
-from configurazione.dati import *
 from configurazione.init import * 
 from datetime import datetime, date, timedelta
-import time
 import os
 import sys
 import pandas as pd
 import numpy as np
-import mysql.connector
-from mysql.connector import errorcode
+from pytz import timezone
+import sqlalchemy
 import ftplib
 
-def datalogger():
-    print('Orario esecuzione: ', datetime.now())
-    global id_impianto
-    id_impianto = sys.argv[1] ## da associare alla foreign_key del database #1
-    mysql_connection(sql_host, sql_user, sql_password, sql_database)
-    ultimo_valore_db = check_last_db_entry()
-    aggiornamento_directory_dataset(ultimo_valore_db)
-    global df
-    if ultimo_valore_db:
-        df = get_data(today_str)
-        df = select_missing_data_db(df, ultimo_valore_db)
+#####################################
+## BLOCCO FUNZIONI ACCESSORIE DI BASE
+#####################################
+
+class mysql_client:
+    def __init__(self, user, password, host, db):
+        url = 'mysql+pymysql://'+user+':'+password+'@'+host+'/'+db
+        self.engine = sqlalchemy.create_engine(url)
+        
+    def db_fetch(self, query):
+        with self.engine.connect() as connection:
+            df = pd.read_sql(query, connection)
+            return(df)
+        
+    def db_alter_table(self, table, df):
+        with self.engine.connect() as connection:
+            df.to_sql(table, connection, index = False, if_exists= 'append')
+
+def ftp_connection(host, port, user, password):
+    try:
+            ftp_engine = ftplib.FTP(encoding='utf-8')
+            ftp_engine.connect(host, port)
+            ftp_engine.login(user, password)
+            ftp_engine.set_pasv(False) # Utilizza la modalità ATTIVA)
+    except Exception as err:
+            print(str(err))
+    return (ftp_engine)
+
+
+##############################
+## BLOCCO FUNZIONI ACCESSORIE
+##############################
+
+def download_ftp(day):
+## SELEZIONE DELLE DIRECTORY LOCALI
+    os.chdir(download_data_path) 
+    if os.path.isdir(day): 
+        print ('Cartella Esistente') 
     else:
-        df = pd.DataFrame()
-        directory = os.listdir(download_data_path)
-        directory.sort()
-        for data in directory:
-            df_daily = get_data(data)
-            df = pd.concat([df, df_daily])
-    if not df.empty:
-        mysql_connection(sql_host, sql_user, sql_password, sql_database)
-        sql_export_df(df, db_table)
-        print('Ultimo upload db: ', datetime.now())
+            os.makedirs(day) 
+            print ('Nuova cartella creata: ', day)  
+            
+## IDENTIFICAZIONE DEI FILE
+    ftpserver_int_filename = 'int_gefran_' + str(day) + '.txt'
+    ftpserver_sb_filename = 'int_gefran_sb_' + str(day) + '.txt'
+    local_int_filename = os.path.join(day, 'download_int_' + str(day) +'.txt')
+    local_sb_filename = os.path.join(day, 'download_sb_'+  str(day) +'.txt')
+ 
+    ftp_engine = ftp_connection(ftp_host, ftp_port, ftp_user, ftp_password)
+    with ftp_engine:
+        ftp_engine.cwd('DATA')
+        ftp_engine.cwd(day)
+        ftp_engine.retrlines('LIST')
+        files = [(ftpserver_int_filename, local_int_filename), (ftpserver_sb_filename, local_sb_filename)]
+        for file in files:
+            with open(file[1], "wb") as f:
+                ftp_engine.retrbinary("RETR " + file[0], f.write)
+        ftp_engine.quit()
+
+    return
+
+def manipulate_dataframe(df, day):
+    ## CORREZIONE COLONNE E VALORI INUTILIZZATI
+    for column in lista_colonne_da_eliminare:
+        try:
+            df.drop(columns=[column], inplace=True)
+            df[column]=df[column].astype(float)
+        except:
+            pass
+    df.dropna(inplace=True)
+    df['Adresse']=df['Adresse'].astype(int)
+    
+    ## CORREZIONE NOMI
+    df.rename(columns={'Unnamed: 0':'local_time'}, inplace=True)
+    df.rename(columns={'Adresse':'fk_address'}, inplace=True)
+    
+    ## CORREZIONE INDICE
+    df.sort_values(by=['fk_address', 'local_time'], inplace=True) 
+    df.reset_index(inplace=True)
+    df.drop(columns=["index"], inplace=True)
+    
+    ## CORREZIONE TEMPORALE
+    stringa_datetime = ' '+day[0:2]+'-'+day[2:4]+'-'+day[4:6]
+    df['local_time'] = df['local_time'] + stringa_datetime
+    df['local_time'] = pd.to_datetime(df['local_time'], format = '%H:%M:%S %y-%m-%d')
+    df['local_time'] = pd.to_datetime(df['local_time']).dt.tz_localize('Europe/Rome')
+    df["time_utc"] = pd.to_datetime(df['local_time']).dt.tz_convert('UTC')
+    df["timestamp_utc"] = pd.to_datetime(df['time_utc']).values.astype(np.int64) // 10 ** 9
+    return(df)
+
+def get_data_as_dataframe(day):
+    file_sb = os.path.join(download_data_path, day,'download_sb_' + str(day) + '.txt')
+    file_int = os.path.join(download_data_path, day,'download_int_' + str(day) + '.txt')
+    df_sb = pd.read_csv(file_sb, sep=';', header=4, encoding_errors="replace")
+    df_int = pd.read_csv(file_int, sep=';', header=4, encoding_errors="replace")
+    df_sb = manipulate_dataframe(df_sb, day)
+    df_int = manipulate_dataframe(df_int, day)
+
+    
+    #MANIPOLAZIONE SPECIFICA
+    ## DISLOCAZIONE DELLA COLONNA IRRAGGIAMENTO NEL DF_INVERTER DAL DF_STRINGHE
+    df_irr=df_sb.loc[df_sb['fk_address']==107,['local_time', 'Irr']]
+    temp_media_tcard = []
+    for item in df_irr["local_time"]:
+        temp_media_tcard.append(
+            pd.to_numeric(
+                df_sb["T_CARD"].loc[
+                    (df_sb["local_time"]==item) & (df_sb["fk_address"]!=110) 
+                ]
+            ).mean()
+        )
+    df_irr['temp_media_string_box'] = temp_media_tcard
+    df_int = pd.merge(df_int, df_irr, on = 'local_time') 
+    df_sb.drop(columns=["Irr"], inplace=True)
+    return(df_sb, df_int)
+
+def update_database(df, tabella, sql_engine):
+    try:
+        sql_engine.db_alter_table(tabella, df)
+    except Exception as err:
+        print("impossibile eseguire l'upload")
+        print(err)
+    return
+
+def get_list_of_missing_days(last_db_entry):
+    missing_days=[]
+    last_entry_date = datetime.fromtimestamp(
+        list(last_db_entry.loc[0])[0],
+        tz = timezone('Europe/Amsterdam')
+    ).date()
+    today_date = datetime.now().date()
+    t_delta =today_date-last_entry_date
+    for i in range(t_delta.days + 1):
+        day = datetime.strftime(
+            last_entry_date + timedelta(days=i), 
+            '%y%m%d')
+        missing_days.append(day)
+    return missing_days
+
+
+################################
+## BLOCCO DI FUNZIONI PRINCIPALI
+################################
+
+def check_last_db_entry(sql_engine, db_table):
+    now = int(datetime.today().timestamp())   
+    query = "SELECT timestamp_utc FROM "+db_table+" WHERE timestamp_utc <= "+str(now)+" ORDER BY timestamp_utc DESC LIMIT 1"
+    last_db_entry = sql_engine.db_fetch(query)
+    return (last_db_entry)
+
+def update_dataset_directory(last_db_entry):
+    if not last_db_entry.empty: ##SE VI È ALMENO UN VALORE SUL DB, SCARICA I DATI DEI NUOVI VALORI 
+        daylist_to_upload = get_list_of_missing_days(last_db_entry)
+        for day in daylist_to_upload:
+            download_ftp(day)
+
+    else: ## SE IL DB È VUOTO -->
+        if not os.listdir(download_data_path): ## SE NON CI SONO CARTELLE, SCARICA L'INTERO DATASET
+            print('Directory vuota - download dei file FTP')
+            lista_file_ftp=[]
+            ftp_engine = ftp_connection(ftp_host, ftp_port, ftp_user, ftp_password)
+            ftp_engine.cwd('DATA')
+            ftp_engine.retrlines('LIST', lista_file_ftp.append)
+            ftp_engine.quit()
+            for file in lista_file_ftp:
+                if file[-6::].isnumeric():
+                    day = str(file[-6::])
+                    download_ftp(day)
+            daylist_to_upload = os.listdir(download_data_path)
+
+        else: ##SE VI SONO GIÀ ALTRE CARTELLE --> PROCEDERE CON L'UPLOAD
+            print('La cartella contiene cartelle non presenti sul db: ')
+            daylist_to_upload = os.listdir(download_data_path)  ## verificare contenuto? 
+    return daylist_to_upload
+
+def extract_dataframe_and_upload_to_database(sql_engine, last_db_entry, daylist_to_upload):
+    df_sb = pd.DataFrame()
+    df_int = pd.DataFrame()    
+    for day in daylist_to_upload:
+        try:
+            df_daily_sb, df_daily_int = get_data_as_dataframe(day)
+            df_sb = pd.concat([df_sb, df_daily_sb])
+            df_int = pd.concat([df_int, df_daily_int])
+        except Exception as err:
+            print(err)
+    if not last_db_entry.empty:
+        df_sb = df_sb.loc[df_sb['timestamp_utc']>last_db_entry.loc[0][0]]
+        df_int = df_int.loc[df_int['timestamp_utc']>last_db_entry.loc[0][0]]
+    if not df_sb.empty:
+        update_database(df_sb, db_table_stringa, sql_engine)
+    if not df_int.empty:
+        update_database(df_int, db_table_inverter, sql_engine)
+    return
+    
+################################
+## PROGRAMMA PRINCIPALE
+################################
+    
+def datalogger():
+    now = datetime.now()
+    print('Orario esecuzione: ', now)
+    sql_engine = mysql_client(user_inverter, password_inverter, host_inverter, db_inverter)
+    ultimo_dato_su_db = check_last_db_entry(sql_engine, db_table_inverter)
+    lista_giorni_da_caricare = update_dataset_directory(ultimo_dato_su_db)
+    extract_dataframe_and_upload_to_database(sql_engine, ultimo_dato_su_db, lista_giorni_da_caricare)
+    print('Ultima verifica: ', datetime.now())    
     print('Fine Operazioni')
     return
 
-def mysql_connection(host, user, password, database):
-    global sql_cnx
-    try:
-        sql_cnx = mysql.connector.connect(host=host, user=user, password=password, database=database)
-    except mysql.connector.Error as err:
-        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
-            print("Username o Password errate")
-        elif err.errno == errorcode.ER_BAD_DB_ERROR:
-            print("Il database non esiste")
-        else:
-            print(err)
-    return
-
-def ftp_connection(host, port, user, password):
-    global ftpc_cnx
-    try:
-            ftpc_cnx = ftplib.FTP()
-            ftpc_cnx.connect(host, port)
-            ftpc_cnx.login(user, password)
-            ftpc_cnx.set_pasv(False) # Utilizza la modalità ATTIVA
-    except Exception as err:
-            print(str(err))
-    return
-
-def check_last_db_entry():
-    global today 
-    global today_str 
-    today = datetime.today()
-    today_str = str(today.strftime('%y%m%d'))[0:19]
-    sql_cursor = sql_cnx.cursor()
-    query = "SELECT "+str(db_colonna_temporale_inverter)+" FROM "+str(db_table)+" WHERE EXISTS(SELECT * FROM "+str(db_table)+" WHERE 0_Time <= '"+str(today_str)+"') ORDER BY "+str(db_colonna_temporale_inverter)+" DESC LIMIT 1"
-    sql_cursor.execute(query)
-    last_entry = sql_cursor.fetchall()
-    if last_entry:
-        print('ultimo valore su db: ', (last_entry[0])[0])
-    else:
-        print('db vuoto')
-    sql_cnx.close()
-    return(last_entry)
-
-def buffer_nuovi_dati(last_entry):
-    lista_giorni_mancanti_su_db = lista_giorni_mancanti(last_entry)
-    ftp_connection(ftp_host, ftp_port, ftp_user, ftp_password)
-    for giorno in lista_giorni_mancanti_su_db:
-        download_ftp(giorno)
-    return
-
-def aggiornamento_directory_dataset(last_entry):
-    if last_entry: 
-        buffer_nuovi_dati(last_entry)
-    else: 
-        if not os.listdir(download_data_path):
-            print('Directory vuota - download dei file FTP')
-            ftp_connection(ftp_host, ftp_port, ftp_user, ftp_password)
-            ftpc_cnx.cwd('DATA')
-            ftpc_cnx.retrlines('LIST', lista_file_ftp.append)
-            ftpc_cnx.quit()
-            lista_file_ftp=[]
-            for file in lista_file_ftp:
-                if file[-6::].isnumeric():
-                    giorno = str(file[-6::])
-                    download_ftp(giorno)
-    return
-
-def lista_giorni_mancanti(last_entry):
-    data_inizio = last_entry[0][0].date()  
-    data_fine = today.date()    
-    delta = data_fine - data_inizio  
-    lista_giorni_mancanti=[]
-    for i in range(delta.days + 1):
-        day = datetime.strftime(
-            data_inizio + timedelta(days=i), 
-            '%y%m%d')
-        lista_giorni_mancanti.append(day)
-    return lista_giorni_mancanti
-
-def select_missing_data_db(df, last_entry):
-    df = df.loc[df['0_Time']>(last_entry[0])[0]]
-    return(df)
-
-def sql_export_df(df, sql_tabella): 
-    print('esportazione dati verso db')
-    columns = df.columns.tolist()
-    columns.append('fk_id_impianto')
-    placeholders = '%s'
-    str_nomi = '('+columns[0]+','
-    str_vals = '(%s,'
-    for i in range(1, len(columns)):
-        if i == len(columns)-1:
-            str_nomi = str_nomi +'`'+ columns[i] +'`' +')'
-            str_vals = str_vals + placeholders + ')'
-        else: 
-            str_nomi = str_nomi +'`'+ columns[i] +'`'+', '
-            str_vals = str_vals + placeholders + ', '
-    mysql_str = "INSERT INTO "+ sql_tabella+ " {col_name} VALUES {values}".format(col_name = str_nomi, values = str_vals)
-    cursor = sql_cnx.cursor()
-    
-    for i in range (0, df.shape[0]):
-        if i%1000==True:
-            print('.')
-        data =  df.iloc[i].tolist()
-        data.append(id_impianto)
-        cursor.execute (mysql_str, data)
-    sql_cnx.commit()
-    cursor.close()
-    sql_cnx.close()
-    print('upload db completato')
-    return
-
-def download_ftp(giorno):
-    print('Download FTP', giorno)
-    os.chdir(download_data_path)
-    ftp_connection(ftp_host, ftp_port, ftp_user, ftp_password)
-    file_originale_inverter = 'int_gefran_' + str(giorno) + '.txt'
-    file_originale_stringhe = 'int_gefran_sb_' + str(giorno) + '.txt'
-    file_scaricato_inverter = os.path.join(giorno, 'download_int_' + str(giorno) +'.txt')
-    file_scaricato_stringhe = os.path.join(giorno, 'download_sb_'+  str(giorno) +'.txt')
-    if os.path.isdir(giorno): 
-        print ('cartella esistente') 
-    else:
-            os.makedirs(giorno) 
-            print ('cartella creata')   
-    ftp_path = ftpc_cnx.pwd()
-    ftpc_cnx.cwd('DATA')
-    ftpc_cnx.cwd(giorno)
-    ftpc_cnx.retrlines('LIST')
-    ftpc_cnx.encoding='utf-8'
-    files = [(file_originale_inverter, file_scaricato_inverter), (file_originale_stringhe, file_scaricato_stringhe)]
-    for file in files:
-        with open(file[1], "wb") as f:
-            try:
-                ftpc_cnx.retrbinary("RETR " + file[0], f.write)                    
-            except:
-                print('file non trovato')
-    ftpc_cnx.cwd(ftp_path)
-    os.chdir(download_data_path)
-    ftpc_cnx.quit()
-    print('Download FTP completato')
-    return()
-
-def get_data(giorno):
-    os.chdir(download_data_path)
-    file_sb = 'download_sb_' + str(giorno) + '.txt'
-    file_int = 'download_int_' + str(giorno) + '.txt'
-
-    #ESTRAZIONE E MANIPOLAZIONE DF STRING_BOX
-    os.chdir(giorno)
-    df = pd.read_csv(file_sb, sep=';', header=4, encoding_errors="replace")
-    os.chdir('..')
-    df.rename(columns={'Unnamed: 0':'0_Time'}, inplace=True) 
-    df.drop(df.loc[df['Adresse']==-1].index, inplace=True)
-    df.drop(df.loc[df['Adresse']==0.0].index, inplace=True) 
-    df.drop(df.loc[df['0_Time']=='[Start]'].index, inplace=True)
-    df.drop(df.loc[df['0_Time']=='Info'].index, inplace=True)
-    df.rename(columns={'Irr':'0_Irr'}, inplace=True) 
-    df.sort_values(by=['Adresse', '0_Time'], inplace=True) 
-    for headers in colonne_vuote_string_box:
-        df.drop(columns=[headers], inplace=True)
-    for old_ind in indirizzi_da_rinominare:
-        k = indirizzi_da_rinominare.index(old_ind)
-        df['Adresse'].replace({indirizzi_da_rinominare[k]:nuovi_indirizzi[k]}, inplace=True)  
-    nuove_colonne = [0]*len(headers_da_rinominare)
-    for new_ind in nuovi_indirizzi:
-        lista_colonne =[]
-        k = nuovi_indirizzi.index(new_ind)
-        if len(suffissi_nuove_colonne) != len(headers_da_rinominare):
-            print('Verificare le colonne da rinominare in /configurazione/dati.py') 
-        for suffisso in suffissi_nuove_colonne:
-            if suffissi_nuove_colonne.index(suffisso) == 0:
-                lista_colonne.append(str(suffisso))
-            else:
-                lista_colonne.append(str(new_ind)+str(suffisso))
-        nuove_colonne[k] = lista_colonne
-    df.dropna(inplace=True, axis =0)
-    stringa_datetime = ' '+giorno[0:2]+'-'+giorno[2:4]+'-'+giorno[4:6]
-    df['0_Time'] = df['0_Time'] + stringa_datetime
-    df['0_Time'] = pd.to_datetime(df['0_Time'], format = '%H:%M:%S %y-%m-%d')
-    df['time_index'] = df['0_Time']
-    df.set_index(keys='time_index', inplace=True)
-    #RE-DISLOCAZIONE DELLE INFORMAZIONI DI STRINGA SU APPOSITE COLONNE
-    df_irraggiamento=df.loc[df['Adresse']==nuovi_indirizzi[6],['0_Time', '0_Irr']]
-    df_string_box = df_irraggiamento.copy()
-    for i in range(0,len(nuovi_indirizzi)):  
-        for k in range(0,len(headers_da_rinominare) ):
-            df_iterativo = (df.loc[df['Adresse']==nuovi_indirizzi[i], [headers_da_rinominare[k]]])
-            df_concatena = pd.DataFrame( {nuove_colonne[i][k]:df_iterativo.iloc[0:len(df_iterativo.index),0]})
-            df_string_box= pd.concat([df_string_box, df_concatena], axis=1)
-    df_string_box.drop(columns=['Adresse', '1.2_7', '2.2_7', '3.2_7', '4.2_7', '5.2_TCARD'], inplace=True)
-    
-    #ESTRAZIONE E MANIPOLAZIONE DF INVERTER
-    os.chdir(giorno)
-    df = pd.read_csv(file_int, sep=';', header=4, encoding_errors="replace")
-    os.chdir('..')
-    df.rename(columns={'Unnamed: 0':'Time'}, inplace=True)
-    df.drop(df.loc[df['Time']=='[Start]'].index, inplace=True) 
-    df.drop(df.loc[df['Time']=='Info'].index, inplace=True) 
-    df.dropna(axis=0, inplace=True)
-    df['Time'] = df['Time'] + stringa_datetime
-    df['Time'] = pd.to_datetime(df['Time'], format = '%H:%M:%S %y-%m-%d')
-    df['time_index'] = df['Time']
-    df.set_index(keys='time_index', inplace=True)
-    df.drop(df.loc[df['Adresse']!=1].index, inplace=True)
-    for headers in colonne_vuote_inverter:
-        df.drop(columns=[headers], inplace=True)
-    for key in df.keys():
-        df.rename(columns={key:'0_'+key}, inplace=True)
-    df_inverter = df.copy()   
-    
-    #MERGE DF GIORNALIERO
-    df_day = pd.merge(df_inverter, df_string_box, on = '0_Time') 
-    df_day.fillna(value=0, inplace=True)
-    return(df_day)
-
-
+################################
+## FUNZIONE MAIN
+################################
 
 while True:
     try:
